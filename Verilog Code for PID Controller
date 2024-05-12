@@ -87,3 +87,82 @@ register #(10)reg_KB(clk_KB,rst,1,in,KB);
 register #(10)reg_N(clk_N,rst,1,in,N);
 assign Ts = 10’h001;
 endmodule
+
+
+Register module
+‘timescale 1ns / 1ps
+module register #(DATA_WIDTH = 8)(
+input clk,rst,en,
+input [DATA_WIDTH-1:0] Din,
+output reg [DATA_WIDTH-1:0] Dout );
+always @(posedge clk or posedge rst)
+if(rst) Dout<=0;
+else if(en) Dout <=Din;
+endmodule
+
+DT PID Module
+‘timescale 1 ns / 1 ns
+module DT_PID (clk,reset, clk_enable, PID_IN, KI, KP, KD,
+KB, Ts, N, ce_out, PID_OUT1);
+input clk;
+input reset;
+input clk_enable;
+input signed [15:0] PID_IN; // sfix16_En4
+input signed [9:0] KI; // sfix10_En9
+input signed [9:0] KP; // sfix10_En9
+input signed [9:0] KD; // sfix10_En9
+input signed [9:0] KB; // sfix10_En9
+input signed [9:0] Ts; // sfix10_En9
+input signed [9:0] N; // sfix10_En5
+output ce_out;
+output signed [16:0] PID_OUT1; // sfix17_En8
+wire signed [25:0] Proportional_Module_out1; // sfix26_En8
+wire signed [25:0] Derivative_Module_out1; // sfix26_En8
+wire signed [25:0] PID_O_P; // sfix26_En8
+wire signed [16:0] Saturation_out1; // sfix17_En8
+wire signed [25:0] Integral_Module_out1; // sfix26_En8
+wire signed [25:0] Sum3_stage2_add_temp; // sfix26_En8
+wire signed [26:0] Sum3_op_stage1; // sfix27_En8
+wire signed [25:0] Sum3_stage3_add_cast; // sfix26_En8
+wire signed [16:0] dtc_out; // sfix17_En8
+Proportional_Module u_Proportional_Module
+(.PID_IN(PID_IN), // sfix16_En4
+.KP(KP), // sfix10_En9
+.Proportional_out(Proportional_Module_out1) // sfix26_En8 );
+Derivative_Module u_Derivative_Module
+(.clk(clk),
+.reset(reset),
+.enb(clk_enable),
+.PID_IN(PID_IN), // sfix16_En4
+.KD(KD), // sfix10_En9
+.N(N), // sfix10_En5
+.Ts(Ts), // sfix10_En9
+.Derivative_out(Derivative_Module_out1) // sfix26_En8 );
+Integral_Module u_Integral_Module
+(.clk(clk),
+.reset(reset),
+.enb(clk_enable),
+.SAT_IN(PID_O_P), // sfix26_En8
+.SAT_OUT(Saturation_out1), // sfix17_En8
+.PID_IN(PID_IN), // sfix16_En4
+.KI(KI), // sfix10_En9
+.KB(KB), // sfix10_En9
+.Ts(Ts), // sfix10_En9
+.integral_out(Integral_Module_out1) // sfix26_En8 );
+assign Sum3_stage2_add_temp = Integral_Module_out1 + Proportional_Module_out1;
+assign Sum3_op_stage1 = {Sum3_stage2_add_temp[25],
+Sum3_stage2_add_temp};
+assign Sum3_stage3_add_cast = Sum3_op_stage1[25:0];
+assign PID_O_P = Sum3_stage3_add_cast + Derivative_Module_out1;
+assign dtc_out = ((PID_O_P[25] == 1’b0) && (PID_O_P[24:16]
+!= 9’b000000000) ? 17’sb01111111111111111 :
+((PID_O_P[25] == 1’b1) && (PID_O_P[24:16]
+!= 9’b111111111) ? 17’sb10000000000000000 :
+$signed(PID_O_P[16:0])));
+assign Saturation_out1 = (dtc_out >
+17’sb01111101000000000 ?
+17’sb01111101000000000 :
+(dtc_out < 17’sb00000000000000000 17’sb00000000000000000:dtc_out));
+assign PID_OUT1 = Saturation_out1;
+assign ce_out = clk_enable;
+endmodule
