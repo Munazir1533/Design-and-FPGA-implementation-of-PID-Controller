@@ -78,3 +78,6 @@ In this project, we chose the FPGA approach and utilized the Xilinx Artix-7 seri
       - Counter Module
       - Frequency to RPM Module
       - Display Module
+
+![project_output](https://github.com/Munazir1533/Design-and-FPGA-implementation-of-PID-Controller/assets/93303360/78d8a4ac-a6d4-4eca-8677-78c0eaf0e865)
+
