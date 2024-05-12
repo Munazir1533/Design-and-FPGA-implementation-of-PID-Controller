@@ -1,0 +1,89 @@
+Verilog Code of PID Controller
+
+# PID Module
+
+```verilog
+`timescale 1ns / 1ps
+module PID_Top_Module(
+    input clk,rst,pulse,sel1,clk_KP,clk_KI,clk_KD,clk_KB,clk_N,
+    input [9:0]in,
+    input [1:0] ROM_addr,
+    output [7:0] Anode_on,
+    output [6:0] LED_glow,
+    output pwm_out,
+    output [15:0] out_pid );
+    wire [15:0] PID_IN,SPEED_IN,error;
+    wire [16:0] PID_OUT;
+    wire [9:0] KI, KP, KD, KB, Ts, N;
+    wire clk_enable,ce_out,sel;
+    wire [16:0] RPM,RPM_DISP;
+    wire clk_512;
+    ROM SPEED_ROM(ROM_addr,SPEED_IN);
+    assign error = SPEED_IN - RPM;
+    CLOCK_DIV #(’d97655,18)clk_512HZ(clk,rst,clk_512);
+    param parameters(in,clk_KP,clk_KI,clk_KD,clk_KB,clk_N,rst,KI,
+    KP,KD,KB,Ts,N);
+    DT_PID PID(clk_512,rst,1,error,KI,KP,KD,KB,Ts,N,ce_out,PID_OUT);
+    pwm PWM_GEN(clk,rst,PID_OUT[15:0],pwm_out);
+    speed_measure SPEED_MEASURE(clk,rst,pulse,RPM,RPM_DISP);
+    display_2 display(clk,rst,SPEED_IN[15:4],{RPM_DISP[16:4]},Anode_on,LED_glow);
+    assign out_pid = sel1 ? PID_OUT[16:1] : error;
+endmodule
+
+`timescale 1ns / 1ps
+module ROM (input [1:0] addr,
+    output reg [15:0] ROM );
+    always @(addr)
+    case(addr)
+        2’b00: ROM <= {12’d800,4’b0000};
+        2’b01: ROM <= {12’d1000,4’b0000};
+        2’b10: ROM <= {12’d1200,4’b0000};
+        2’b11: ROM <= {12’d1500,4’b0000};
+    endcase
+endmodule
+
+
+## CLOCK DIVIDER MODULE
+
+```verilog
+`timescale 1ns / 1ps
+module CLOCK_DIV #(parameter DIVIDE_VALUE = 'd999, DATA_WIDTH=26)(
+    input wire clk_100mhz,
+    input wire rst,
+    output reg clk_output
+);
+    // localparam DIVIDE_VALUE = (100000000 / DESIRED_FREQ) / 2 - 1;
+    // Divide by half the period // Counter and divide value
+    reg [DATA_WIDTH-1:0] counter_1; // Clock divider logic
+
+    always @(posedge clk_100mhz or posedge rst) begin
+        if (rst) begin
+            counter_1 <= 0;
+            clk_out <= 0; // Assuming clk_out is meant to be clk_output
+        end
+        else begin
+            if (counter_1 == DIVIDE_VALUE) begin
+                counter_1 <= 0;
+                clk_output <= ~clk_output;
+            end
+            else begin
+                counter_1 <= counter_1 + 1;
+            end
+        end
+    end
+endmodule
+
+```verilog
+PARAMETER MODULE
+‘timescale 1ns / 1ps
+module param(
+input [9:0]in,
+input clk_KP,clk_KI,clk_KD,clk_KB,clk_N,rst,
+output [9:0] KI,KP,KD,KB,Ts,N );
+register #(10)reg_KP(clk_KP,rst,1,in,KP);
+register #(10)reg_KI(clk_KI,rst,1,in,KI);
+register #(10)reg_KD(clk_KD,rst,1,in,KD);
+register #(10)reg_KB(clk_KB,rst,1,in,KB);
+register #(10)reg_N(clk_N,rst,1,in,N);
+assign Ts = 10’h001;
+endmodule
