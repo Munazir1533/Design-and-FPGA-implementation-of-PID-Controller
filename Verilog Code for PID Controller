@@ -166,3 +166,182 @@ assign Saturation_out1 = (dtc_out >
 assign PID_OUT1 = Saturation_out1;
 assign ce_out = clk_enable;
 endmodule
+
+
+Proportional Module
+‘timescale 1 ns / 1 ns
+module Proportional_Module (PID_IN, KP, Proportional_out );
+input signed [15:0] PID_IN; // sfix16_En4
+input signed [9:0] KP; // sfix10_En4
+output signed [25:0] Proportional_out; // sfix26_En8
+wire signed [25:0] Product_out1; // sfix26_En8
+assign Product_out1 = PID_IN * KP;
+assign Proportional_out = Product_out1;
+endmodule
+
+
+Integrator Module
+‘timescale 1 ns / 1 ns
+module Integral_Module
+(clk, reset, enb, SAT_IN, SAT_OUT, PID_IN, KI, KB, Ts, integral_out );
+input clk;
+input reset;
+input enb;
+input signed [25:0] SAT_IN; // sfix26_En8
+input signed [16:0] SAT_OUT; // sfix17_En8
+input signed [15:0] PID_IN; // sfix16_En4
+input signed [9:0] KI; // sfix10_En4
+input signed [9:0] KB; // sfix10_En4
+input signed [9:0] Ts; // sfix10_En9
+output signed [25:0] integral_out; // sfix26_En8
+wire signed [25:0] Sum1_sub_cast; // sfix26_En8
+wire signed [25:0] Sum1_out1; // sfix26_En8
+wire signed [35:0] KB_MUL_mul_temp; // sfix36_En12
+wire signed [31:0] KB_MUL_out1; // sfix32_En8
+wire signed [25:0] KI_MUL_mul_temp; // sfix26_En8
+wire signed [31:0] KI_MUL_out1; // sfix32_En8
+wire signed [31:0] Sum4_out1; // sfix32_En8
+wire signed [25:0] INTEGRATOR_out1; // sfix26_En8
+assign Sum1_sub_cast = {{9{SAT_OUT[16]}}, SAT_OUT};
+assign Sum1_out1 = Sum1_sub_cast - SAT_IN;
+assign KB_MUL_mul_temp = KB * Sum1_out1;
+assign KB_MUL_out1 = KB_MUL_mul_temp[35:4];
+assign KI_MUL_mul_temp = PID_IN * KI;
+assign KI_MUL_out1 = {{6{KI_MUL_mul_temp[25]}}, KI_MUL_mul_temp};
+assign Sum4_out1 = KB_MUL_out1 + KI_MUL_out1;
+INTEGRATOR u_INTEGRATOR (.clk(clk),
+.reset(reset),
+.enb(enb),
+.in(Sum4_out1), // sfix32_En8
+.Ts(Ts), // sfix10_En9
+.out(INTEGRATOR_out1) // sfix26_En8 );
+assign integral_out = INTEGRATOR_out1;
+endmodule
+‘timescale 1 ns / 1 ns
+module INTEGRATOR (clk, reset, enb, in, Ts, out );
+input clk;
+input reset;
+input enb;
+input signed [31:0] in; // sfix32_En8
+input signed [9:0] Ts; // sfix10_En9
+output signed [25:0] out; // sfix26_En8
+reg signed [31:0] Delay_out1; // sfix32_En8
+wire signed [41:0] Ts_MUL_mul_temp; // sfix42_En17
+wire signed [31:0] Ts_MUL_out1; // sfix32_En8
+wire signed [25:0] Sum_out1; // sfix26_En8
+reg signed [25:0] Delay1_out1; // sfix26_En8
+wire signed [25:0] Sum_add_cast; // sfix26_En8
+always @(posedge clk or posedge reset)
+begin : Delay_process
+if (reset == 1’b1) begin
+Delay_out1 <= 32’sb00000000000000000000000000000000;
+end
+else begin
+if (enb) begin
+Delay_out1 <= in;
+end
+end
+end
+assign Ts_MUL_mul_temp = Ts * Delay_out1;
+assign Ts_MUL_out1 = Ts_MUL_mul_temp[40:9];
+always @(posedge clk or posedge reset)
+begin : Delay1_process
+if (reset == 1’b1) begin
+Delay1_out1 <= 26’sb00000000000000000000000000;
+end
+else begin
+if (enb) begin
+Delay1_out1 <= Sum_out1;
+end
+end
+end
+assign Sum_add_cast = Ts_MUL_out1[25:0];
+assign Sum_out1 = Sum_add_cast + Delay1_out1;
+assign out = Sum_out1;
+
+
+Derivative Module
+‘timescale 1 ns / 1 ns
+module Derivative_Module (clk, reset, enb, PID_IN, KD, N, Ts, Derivative_out );
+input clk;
+input reset;
+input enb;
+input signed [15:0] PID_IN; // sfix16_En4
+input signed [9:0] KD; // sfix10_En4
+input signed [9:0] N; // sfix10_En2
+input signed [9:0] Ts; // sfix10_En9
+output signed [25:0] Derivative_out; // sfix26_En8
+wire signed [25:0] KD_MUL_out1; // sfix26_En8
+wire signed [25:0] N_MUL_out1; // sfix26_En8
+wire signed [25:0] INTEGRATOR1_out1; // sfix26_En8
+wire signed [25:0] Sum2_out1; // sfix26_En8
+wire signed [35:0] N_MUL_mul_temp; // sfix36_En10 assign KD_MUL_out1 = PID_IN * KD;
+INTEGRATOR1 u_INTEGRATOR1 (.clk(clk),
+.reset(reset),
+.enb(enb),
+.in(N_MUL_out1), // sfix26_En8
+.Ts(Ts), // sfix10_En9
+.out(INTEGRATOR1_out1) // sfix26_En8
+);
+assign Sum2_out1 = KD_MUL_out1 - INTEGRATOR1_out1;
+assign N_MUL_mul_temp = N * Sum2_out1;
+assign N_MUL_out1 = N_MUL_mul_temp[27:2];
+assign Derivative_out = N_MUL_out1;
+endmodule
+‘timescale 1 ns / 1 ns
+module INTEGRATOR1 (clk, reset, enb, in, Ts, out );
+input clk;
+input reset;
+input enb;
+input signed [25:0] in; // sfix26_En8
+input signed [9:0] Ts; // sfix10_En9
+output signed [25:0] out; // sfix26_En8
+reg signed [25:0] Delay_out1; // sfix26_En8
+wire signed [35:0] Ts_MUL_out1; // sfix36_En17
+wire signed [25:0] Sum_out1; // sfix26_En8
+reg signed [25:0] Delay1_out1; // sfix26_En8
+wire signed [25:0] Sum_add_cast; // sfix26_En8
+always @(posedge clk or posedge reset)
+begin : Delay_process
+if (reset == 1’b1) begin
+Delay_out1 <= 26’sb00000000000000000000000000;
+end
+else begin
+if (enb) begin
+Delay_out1 <= in;
+end
+end
+end
+assign Ts_MUL_out1 = Ts * Delay_out1;
+always @(posedge clk or posedge reset)
+begin : Delay1_process
+if (reset == 1’b1) begin
+Delay1_out1 <= 26’sb00000000000000000000000000;
+end
+else begin
+if (enb) begin
+Delay1_out1 <= Sum_out1;
+end
+end
+end
+assign Sum_add_cast = Ts_MUL_out1[34:9];
+assign Sum_out1 = Sum_add_cast + Delay1_out1;
+assign out = Sum_out1;
+endmodule
+
+PWM Generation Module
+‘timescale 1ns / 1ps
+module pwm( input clk,rst, input [15:0] ref, output pwm_out );
+wire [15:0]sawtooth ;
+reg[15:0] counter_1 = 0;
+always @(posedge clk or posedge rst)
+begin
+if(rst==1) counter_1 <= 0;
+else begin
+if(counter_1 == ’d49999) counter_1 <= 0;
+else counter_1 <= counter_1 + 1;
+end
+end
+assign sawtooth = counter_1;
+assign pwm_out = (counter_1 >= ref ) ? 0 :(rst?0:1);
+endmodule
